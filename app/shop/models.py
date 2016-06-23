@@ -2,7 +2,6 @@
 from shop import db, app
 from sqlalchemy.orm import relation, backref
 from sqlalchemy import ForeignKey
-from passlib.apps import custom_app_context as pwd_context
 from itsdangerous import (TimedJSONWebSignatureSerializer
                           as Serializer, BadSignature, SignatureExpired)
 
@@ -18,7 +17,7 @@ def dump_datetime(value):
 class User(db.Model):
     __tablename__ = 'users'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column('id', db.Integer(unsigned=True), primary_key=True, autoincrement=True)
     twitter_token = db.Column(db.Text)
     twitter_secret = db.Column(db.Text)
     twitter_name = db.Column(db.Text)
@@ -41,23 +40,10 @@ class User(db.Model):
         return user
 
 
-class Shop(db.Model):
-    __tablename__ = 'shops'
-
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, ForeignKey('users.id'))
-    name = db.Column(db.Text)
-    email = db.Column(db.Text)
-    
-    def __repr__(self):
-        return '<Shop id={id} name={name!r} email={email!r}>'.format(
-            id=self.id, name=self.name, email=self.email)
-
-
 class Customer(db.Model):
     __tablename__ = 'customers'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column('id', db.Integer(unsigned=True), primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, ForeignKey('users.id'))
     
     user = relation(User, backref=backref('customer'))
@@ -67,24 +53,30 @@ class Customer(db.Model):
             id=self.id)
 
 
-class Activity(db.Model):
-    __tablename__ = 'activities'
-
-    id = db.Column(db.Integer, primary_key=True)
+class ActivityBase:
+    uuid = db.Column(db.Integer, unique=True)
     user_id = db.Column(db.Integer, ForeignKey('users.id'))
     shop_id = db.Column(db.Integer, ForeignKey('shops.id'))
     activity_name = db.Column(db.Text)
     activity_location = db.Column(db.Text)
     activity_start_date = db.Column(db.DateTime)
     activity_end_date = db.Column(db.DateTime)
-    activity_description= db.Column(db.Text)
-    activity_url= db.Column(db.Text)
-    activity_template= db.Column(db.Text)
+    activity_description = db.Column(db.Text)
+    activity_url = db.Column(db.Text)
+    activity_template = db.Column(db.Text)
+
+
+# 活躍中のActivity
+class Activity(db.Model, ActivityBase):
+    __tablename__ = 'activities'
+
+    id = db.Column('id', db.Integer(unsigned=True), primary_key=True, autoincrement=True)
 
     @property
     def serialize(self):
         return dict(
             id=self.id,
+            uuid=self.uuid,
             user_id=self.user_id,
             shop_id=self.shop_id,
             activity_name=self.activity_name,
@@ -101,13 +93,37 @@ class Activity(db.Model):
     def serialize_lines(self):
         return [item.serialize for item in self.lines]
 
-    shop = relation(Shop, backref=backref('activities', order_by=id))
+# 終わったActivity
+class ActivityClosed(db.Model, ActivityBase):
+    __tablename__ = 'closed_activities'
+
+    @property
+    def serialize(self):
+        return dict(
+            uuid=self.uuid,
+            user_id=self.user_id,
+            shop_id=self.shop_id,
+            activity_name=self.activity_name,
+            activity_location=self.activity_location,
+            activity_start_date=self.activity_start_date,
+            activity_end_date=self.activity_end_date,
+            activity_description=self.activity_description,
+            activity_url=self.activity_url,
+            activity_template=self.activity_template,
+            activity_lines=self.serialize_lines
+        )
+
+    @property
+    def serialize_lines(self):
+        return [item.serialize for item in self.lines]
+
+
 
 
 class Line(db.Model):
     __tablename__ = 'lines'
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column('id', db.Integer(unsigned=True), primary_key=True, autoincrement=True)
     activity_id = db.Column(db.Integer, ForeignKey('activities.id'))
     customer_id = db.Column(db.Integer, ForeignKey('customers.id'))
 

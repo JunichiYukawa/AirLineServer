@@ -80,12 +80,36 @@ def get_my_info():
         }), 200)
 
 
-@app.route('/api/activities')
+@app.route('/api/activities', methods=['GET'])
 @auth.login_required
 def get_my_activity():
     objects = [ act.serialize for act in Activity.query.filter(Activity.user_id==g.user.id).all()]
     data = dict(total=len(objects), objects=objects)
     return (jsonify(data), 200)
+
+
+@app.route('/api/activities', methods=['POST'])
+@auth.login_required
+def post_my_activity():
+    activity_name = request.json.get('activity_name')
+    activity_location = request.json.get('activity_location')
+    activity_start_date = request.json.get('activity_start_date')
+    activity_end_date = request.json.get('activity_end_date')
+    activity_description = request.json.get('activity_description')
+    activity_url = request.json.get('activity_url')
+    activity_template = request.json.get('activity_template')
+
+    act = Activity(
+        activity_name=activity_name,
+        activity_location=activity_location,
+        activity_start_date=activity_start_date,
+        activity_end_date=activity_end_date,
+        activity_description=activity_description,
+        activity_url=activity_url,
+        activity_template=activity_template
+    )
+    db.session.add(act)
+    db.session.commit()
 
 
 manager.create_api(Shop, methods=['GET', 'POST', 'PUT', 'DELETE'])
