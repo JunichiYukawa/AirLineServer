@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
+from datetime import datetime
+import uuid
 from flask import jsonify, request, url_for, abort, g
 from flask_restless import APIManager, ProcessingException
 
 from shop import app, db, auth
 from shop.models import User, Customer, Activity, Line
-
+import tweet
 
 
 @auth.verify_password
@@ -99,15 +101,33 @@ def post_my_activity():
     activity_url = request.json.get('activity_url')
     activity_template = request.json.get('activity_template')
 
+    if activity_start_date:
+        start_date = datetime.strptime(activity_start_date, "%Y-%m-%dT%H:%M:%S")
+    else:
+        start_date = None
+    if activity_end_date:
+        end_date = datetime.strptime(activity_end_date, "%Y-%m-%dT%H:%M:%S")
+    else:
+        end_date = None
+
     act = Activity(
+        user_id=g.user.id,
+        uuid=str(uuid.uuid4()),
         activity_name=activity_name,
         activity_location=activity_location,
-        activity_start_date=activity_start_date,
-        activity_end_date=activity_end_date,
+        activity_start_date=start_date,
+        activity_end_date=end_date,
         activity_description=activity_description,
         activity_url=activity_url,
         activity_template=activity_template
     )
     db.session.add(act)
     db.session.commit()
+
+    msg = "【テスト】{0}\nhttp://vourja.info/shop/?access={1}".format(
+        activity_template, act.uuid.replace('-', '_'))
+
+    #tweet.post(g.user.twitter_token, g.user.twitter_secret, msg)
+
+    return jsonify(act.serialize)
 

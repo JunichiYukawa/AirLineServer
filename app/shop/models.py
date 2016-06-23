@@ -11,13 +11,13 @@ def dump_datetime(value):
     """Deserialize datetime object into string form for JSON processing."""
     if value is None:
         return None
-    return [value.strftime("%Y-%m-%d"), value.strftime("%H:%M:%S")]
+    return value.strftime("%Y-%m-%dT%H:%M:%S")
 
 
 class User(db.Model):
     __tablename__ = 'users'
 
-    id = db.Column('id', db.Integer(unsigned=True), primary_key=True, autoincrement=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     twitter_token = db.Column(db.Text)
     twitter_secret = db.Column(db.Text)
     twitter_name = db.Column(db.Text)
@@ -43,7 +43,7 @@ class User(db.Model):
 class Customer(db.Model):
     __tablename__ = 'customers'
 
-    id = db.Column('id', db.Integer(unsigned=True), primary_key=True, autoincrement=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     user_id = db.Column(db.Integer, ForeignKey('users.id'))
     
     user = relation(User, backref=backref('customer'))
@@ -53,10 +53,13 @@ class Customer(db.Model):
             id=self.id)
 
 
-class ActivityBase:
+# 活躍中のActivity
+class Activity(db.Model):
+    __tablename__ = 'activities'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     uuid = db.Column(db.Integer, unique=True)
     user_id = db.Column(db.Integer, ForeignKey('users.id'))
-    shop_id = db.Column(db.Integer, ForeignKey('shops.id'))
     activity_name = db.Column(db.Text)
     activity_location = db.Column(db.Text)
     activity_start_date = db.Column(db.DateTime)
@@ -65,24 +68,16 @@ class ActivityBase:
     activity_url = db.Column(db.Text)
     activity_template = db.Column(db.Text)
 
-
-# 活躍中のActivity
-class Activity(db.Model, ActivityBase):
-    __tablename__ = 'activities'
-
-    id = db.Column('id', db.Integer(unsigned=True), primary_key=True, autoincrement=True)
-
     @property
     def serialize(self):
         return dict(
             id=self.id,
             uuid=self.uuid,
             user_id=self.user_id,
-            shop_id=self.shop_id,
             activity_name=self.activity_name,
             activity_location=self.activity_location,
-            activity_start_date=self.activity_start_date,
-            activity_end_date=self.activity_end_date,
+            activity_start_date=dump_datetime(self.activity_start_date),
+            activity_end_date=dump_datetime(self.activity_end_date),
             activity_description=self.activity_description,
             activity_url=self.activity_url,
             activity_template=self.activity_template,
@@ -92,38 +87,12 @@ class Activity(db.Model, ActivityBase):
     @property
     def serialize_lines(self):
         return [item.serialize for item in self.lines]
-
-# 終わったActivity
-class ActivityClosed(db.Model, ActivityBase):
-    __tablename__ = 'closed_activities'
-
-    @property
-    def serialize(self):
-        return dict(
-            uuid=self.uuid,
-            user_id=self.user_id,
-            shop_id=self.shop_id,
-            activity_name=self.activity_name,
-            activity_location=self.activity_location,
-            activity_start_date=self.activity_start_date,
-            activity_end_date=self.activity_end_date,
-            activity_description=self.activity_description,
-            activity_url=self.activity_url,
-            activity_template=self.activity_template,
-            activity_lines=self.serialize_lines
-        )
-
-    @property
-    def serialize_lines(self):
-        return [item.serialize for item in self.lines]
-
-
 
 
 class Line(db.Model):
     __tablename__ = 'lines'
 
-    id = db.Column('id', db.Integer(unsigned=True), primary_key=True, autoincrement=True)
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     activity_id = db.Column(db.Integer, ForeignKey('activities.id'))
     customer_id = db.Column(db.Integer, ForeignKey('customers.id'))
 
