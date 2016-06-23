@@ -3,7 +3,7 @@ from flask import jsonify, request, url_for, abort, g
 from flask_restless import APIManager, ProcessingException
 
 from shop import app, db, auth
-from shop.models import User, Shop, Customer, Activity, Line
+from shop.models import User, Customer, Activity, Line
 
 
 
@@ -111,8 +111,3 @@ def post_my_activity():
     db.session.add(act)
     db.session.commit()
 
-
-manager.create_api(Shop, methods=['GET', 'POST', 'PUT', 'DELETE'])
-manager.create_api(Customer, methods=['GET', 'POST', 'PUT', 'DELETE'])
-manager.create_api(Activity, methods=['GET', 'POST', 'PUT', 'DELETE'])
-manager.create_api(Line, methods=['GET', 'POST', 'PUT', 'DELETE'])
