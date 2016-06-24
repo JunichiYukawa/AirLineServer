@@ -93,11 +93,12 @@ class Line(db.Model):
     __tablename__ = 'lines'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    uuid = db.Column(db.Integer, unique=True)
     activity_id = db.Column(db.Integer, ForeignKey('activities.id'))
-    customer_id = db.Column(db.Integer, ForeignKey('customers.id'))
+    user_id = db.Column(db.Integer, ForeignKey('users.id'))
 
     activity = relation(Activity, backref=backref('lines', order_by=id))
-    customer = relation(Customer, backref=backref('customers', order_by=id))
+    user = relation(Customer, backref=backref('users', order_by=id))
 
     @property
     def serialize(self):
