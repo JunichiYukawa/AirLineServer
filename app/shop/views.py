@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 import uuid
-from flask import jsonify, request, url_for, redirect, abort, g, render_template
+import io
+from flask import jsonify, request, url_for, redirect, abort, g, render_template, make_response, session
 
-from shop import app, db, auth, session
+from shop import app, db, auth
 from shop.models import User, Activity, Line, Customer
 
 import tweepy
 from tweepy.error import TweepError, RateLimitError
+
+import qrcode
 
 READWRITE_CONSUMER_KEY = 'L6StgFi57qsxCS3GOvzRrj5I7'
 READWRITE_CONSUMER_SECRET = 'DYu4bES4onS68ZSf6jViuHjqXzDr6GaBBAAhHAhywo3ju6DPIP'
@@ -49,15 +52,22 @@ def tweet_post(access_token, access_secret, message):
     :return: 1:正常 2:認証エラー 3:ツイート制限
     '''
     try:
-        auth = tweepy.OAuthHandler(READWRITE_CONSUMER_KEY, READWRITE_CONSUMER_SECRET)
-        auth.set_access_token(access_token, access_secret)
-        api = tweepy.API(auth)
+        tweet_auth = tweepy.OAuthHandler(READWRITE_CONSUMER_KEY, READWRITE_CONSUMER_SECRET)
+        tweet_auth.set_access_token(access_token, access_secret)
+        api = tweepy.API(tweet_auth)
         api.update_status(status=message)
     except TweepError as e:
+        print e
         return 2
     except RateLimitError as e:
         return 3
     return 1
+
+
+@app.route('/', methods=['GET'])
+def root():
+    print session
+    return redirect('/shop')
 
 
 @app.route('/shop', methods=['GET'])
@@ -76,6 +86,7 @@ def shop_view():
     session['request_token'] = handler.request_token
     session['act_uuid'] = act_uuid
 
+    print session
     # static
     url_for('static', filename="style.css")
     return render_template('shop.html', act=act.serialize, start_date=str2date(act.activity_start_date), twitter_url=twitter_url)
@@ -88,7 +99,7 @@ def add_member():
 
     やること: 客と行列を取得する。なければ作る。
     '''
-    print session.items()
+    print session
     verifier = request.args.get('oauth_verifier')
     oauth_token = request.args.get('oauth_token')
     request_token = session.get('request_token')
@@ -150,17 +161,32 @@ def line_view(line_no):
     if act is None:
         abort(404)
 
-    return render_template('line.html', act=act.serialize, start_date=str2date(act.activity_start_date))
+    return render_template('line.html',
+        act=act.serialize,
+        line_uuid=line_no,
+        start_date=str2date(act.activity_start_date))
 
 
 @app.route('/line/qr')
 def get_image():
-    line_uuid = request.args.get('line_uuid')
+    line_uuid = request.args.get('i')
     if line_uuid is None:
         abort(404)
 
-    
-    return send_file(filename, mimetype='image/gif')
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(line_uuid)
+    qr.make(fit=True)
+    pil_image = qr.make_image()
+    output = io.BytesIO()
+    pil_image.save(output, format="png")
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'image/jpeg'
+    return response
 
 
 @app.route('/api/tw/register', methods = ['POST'])
@@ -243,13 +269,12 @@ def post_my_activity():
     db.session.add(act)
     db.session.commit()
 
-    msg = "【テスト】{0}\nhttp://{1}/shop?i={2}".format(
+    msg = "【自宅ネットワークでテスト中】{0}\nhttp://{1}/shop?i={2}".format(
         activity_template,
         '192.168.111.109:5000',
         act.uuid.replace('-', '_'))
 
-    print msg
-    #tweet.post(msg)
+    tweet_post(g.user.twitter_token, g.user.twitter_secret, msg)
 
     return jsonify(act.serialize)
 

@@ -1,3 +1,3 @@
-from shop import app
+import shop
 
-app.run(host='0.0.0.0', port=5000, debug=True)
+shop.app.run(host='0.0.0.0', port=5000, debug=True)

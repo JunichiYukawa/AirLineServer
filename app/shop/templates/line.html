@@ -23,21 +23,11 @@
 
         <div class="cover-container">
 
-          <div class="masthead clearfix">
-            <div class="inner">
-              <h3 class="masthead-brand">AirLine</h3>
-              <nav class="nav nav-masthead">
-                <a class="nav-link active" href="#">Home</a>
-                <a class="nav-link" href="#">Features</a>
-                <a class="nav-link" href="#">Contact</a>
-              </nav>
-            </div>
-          </div>
-
           <div class="inner cover">
             <h1 class="date-heading">{{ line_no }}</h1>
             <h2 class="cover-heading">{{ act.activity_name }}</h2>
-
+            <p>あなたの番号は <span class="your-number">88</span> 番です</p>
+            <img src="/line/qr?i={{ line_uuid }}">
           </div>
 
           <div class="mastfoot">

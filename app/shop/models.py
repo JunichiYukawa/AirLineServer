@@ -109,6 +109,7 @@ class Line(db.Model):
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
     uuid = db.Column(db.Text, unique=True)
+    number = db.Column(db.Integer)
     activity_id = db.Column(db.Integer, ForeignKey('activities.id'))
     customer_id = db.Column(db.Integer, ForeignKey('customers.id'))
 
