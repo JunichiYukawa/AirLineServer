@@ -11,6 +11,8 @@ def dump_datetime(value):
     """Deserialize datetime object into string form for JSON processing."""
     if value is None:
         return None
+    elif isinstance(value, basestring):
+        return value
     return value.strftime("%Y-%m-%dT%H:%M:%S")
 
 
@@ -44,13 +46,26 @@ class Customer(db.Model):
     __tablename__ = 'customers'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    user_id = db.Column(db.Integer, ForeignKey('users.id'))
-    
-    user = relation(User, backref=backref('customer'))
+    twitter_token = db.Column(db.Text)
+    twitter_secret = db.Column(db.Text)
+    twitter_name = db.Column(db.Text)
+    twitter_id = db.Column(db.Integer)
 
-    def __repr__(self):
-        return '<Customer id={id}>'.format(
-            id=self.id)
+    def generate_auth_token(self, expiration = 3600):
+        s = Serializer(app.config['SECRET_KEY'], expires_in = expiration)
+        return s.dumps({ 'id': self.id })
+
+    @staticmethod
+    def verify_auth_token(token):
+        s = Serializer(app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token)
+        except SignatureExpired:
+            return None # valid token, but expired
+        except BadSignature:
+            return None # invalid token
+        customer = Customer.query.get(data['id'])
+        return customer
 
 
 # 活躍中のActivity
@@ -58,12 +73,12 @@ class Activity(db.Model):
     __tablename__ = 'activities'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    uuid = db.Column(db.Integer, unique=True)
+    uuid = db.Column(db.Text, unique=True)
     user_id = db.Column(db.Integer, ForeignKey('users.id'))
     activity_name = db.Column(db.Text)
     activity_location = db.Column(db.Text)
-    activity_start_date = db.Column(db.DateTime)
-    activity_end_date = db.Column(db.DateTime)
+    activity_start_date = db.Column(db.Text)
+    activity_end_date = db.Column(db.Text)
     activity_description = db.Column(db.Text)
     activity_url = db.Column(db.Text)
     activity_template = db.Column(db.Text)
@@ -93,12 +108,12 @@ class Line(db.Model):
     __tablename__ = 'lines'
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    uuid = db.Column(db.Integer, unique=True)
+    uuid = db.Column(db.Text, unique=True)
     activity_id = db.Column(db.Integer, ForeignKey('activities.id'))
-    user_id = db.Column(db.Integer, ForeignKey('users.id'))
+    customer_id = db.Column(db.Integer, ForeignKey('customers.id'))
 
     activity = relation(Activity, backref=backref('lines', order_by=id))
-    user = relation(Customer, backref=backref('users', order_by=id))
+    customer = relation(Customer, backref=backref('customer', order_by=id))
 
     @property
     def serialize(self):

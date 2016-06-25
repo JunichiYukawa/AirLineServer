@@ -6,7 +6,7 @@ from tweepy.error import TweepError, RateLimitError
 CONSUMER_KEY = 'L6StgFi57qsxCS3GOvzRrj5I7'
 CONSUMER_SECRET = 'DYu4bES4onS68ZSf6jViuHjqXzDr6GaBBAAhHAhywo3ju6DPIP'
 
-def post(access_token, access_secret, message):
+def tweet_post(access_token, access_secret, message):
     '''
     Tweetする
     :param access_token:
@@ -24,22 +24,3 @@ def post(access_token, access_secret, message):
     except RateLimitError as e:
         return 3
     return 1
-
-
-def get_authorization_url(callback_url):
-    '''
-    認証トークンのためのURLとリクエストトークンのタプルを返却する
-    '''
-    auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET, callback_url)
-    return (auth.get_authorization_url(), auth.request_token)
-
-
-
-def get_auth_from_token(request_token, verifier):
-    '''
-    リクエストトークンと認証値からアクセストークンとパスを取得する
-    '''
-    auth = tweepy.OAuthHandler(CONSUMER_KEY, CONSUMER_SECRET)
-    auth.request_token = request_token
-    auth.get_access_token(verifier)
-    return auth

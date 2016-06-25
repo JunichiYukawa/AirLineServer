@@ -1,7 +1,7 @@
+# -*- coding: utf-8 -*-
 from flask import Flask, request, session
 from flask_sqlalchemy import SQLAlchemy
 from flask_httpauth import HTTPBasicAuth
-from flask_login import current_user
 import logging
 
 app = Flask(__name__)

@@ -1,4 +1,9 @@
-SQLALCHEMY_DATABASE_URI = 'sqlite:///flaskr.db'
-SECRET_KEY = 'junichiyukawasecretkey'
+SQLALCHEMY_DATABASE_URI = 'sqlite:///airline.db'
+SECRET_KEY = 'koreha mensetsu youni tukutta kedo'
 
 SQLALCHEMY_TRACK_MODIFICATIONS = True
+
+SESSION_COOKIE_PATH='./session'
+SESSION_REFRESH_EACH_REQUEST = False
+
+SERVER_NAME = '192.168.111.109:5000'

@@ -1,13 +1,20 @@
 # -*- coding: utf-8 -*-
 from datetime import datetime
 import uuid
-from flask import jsonify, session, request, url_for, redirect, abort, g, render_template
-from flask_restless import APIManager
+from flask import jsonify, request, url_for, redirect, abort, g, render_template
 
-from shop import app, db, auth
-from shop.models import User, Activity, Line
-import tweet
+from shop import app, db, auth, session
+from shop.models import User, Activity, Line, Customer
 
+import tweepy
+from tweepy.error import TweepError, RateLimitError
+
+READWRITE_CONSUMER_KEY = 'L6StgFi57qsxCS3GOvzRrj5I7'
+READWRITE_CONSUMER_SECRET = 'DYu4bES4onS68ZSf6jViuHjqXzDr6GaBBAAhHAhywo3ju6DPIP'
+READONLY_CONSUMER_KEY = 'xa78PeGeQF6G6y5Jwp7Og9Oco'
+READONLY_CONSUMER_SECRET = 'AncK0rn0LLBGq4yrFzQwYBz0jVNH9VaqbgoJYGB8HKFE5Yeg5z'
+
+CALLBACK_URL = 'http://192.168.111.109:5000/twitter_redirect'
 
 @auth.verify_password
 def verify_password(token, secret):
@@ -26,34 +33,53 @@ def auth_func(**kw):
     app.logger.debug("auth_func")
     pass
 
+def str2date(str):
+    if str:
+        return datetime.strptime(str, "%Y-%m-%dT%H:%M:%S").strftime("%Y年%m月%d日 %H時%S分").decode('utf-8')
+    else:
+        return ""
 
-manager = APIManager(
-    app,
-    preprocessors=dict(
-        POST=[auth_func],
-        GET_SINGLE=[auth_func],
-        GET_MANY=[auth_func],
-        PATCH_SINGLE=[auth_func],
-        PATCH_MANY=[auth_func],
-        DELETE_SINGLE=[auth_func],
-        DELETE_MANY=[auth_func]),
-    flask_sqlalchemy_db=db
-)
+
+def tweet_post(access_token, access_secret, message):
+    '''
+    Tweetする
+    :param access_token:
+    :param access_secret:
+    :param message:
+    :return: 1:正常 2:認証エラー 3:ツイート制限
+    '''
+    try:
+        auth = tweepy.OAuthHandler(READWRITE_CONSUMER_KEY, READWRITE_CONSUMER_SECRET)
+        auth.set_access_token(access_token, access_secret)
+        api = tweepy.API(auth)
+        api.update_status(status=message)
+    except TweepError as e:
+        return 2
+    except RateLimitError as e:
+        return 3
+    return 1
+
 
 @app.route('/shop', methods=['GET'])
 def shop_view():
     act_uuid = request.args.get('i')
-    #if uuid is None:
-    #    abort(404)
-    #uuid = uuid.replace('_', '-')
-    #act = Activity.query.filter(Activity.uuid==uuid).first()
-    #if act is None:
-    #    abort(404)
-    callback_url = '/twitter_redirect'
-    twitter_url, request_token = tweet.get_authorization_url(callback_url)
-    session['request_token'] = request_token
+    if act_uuid is None:
+        abort(404)
+    act_uuid = act_uuid.replace('_', '-')
+    act = Activity.query.filter(Activity.uuid==act_uuid).first()
+    if act is None:
+        abort(404)
+
+    handler = tweepy.OAuthHandler(READONLY_CONSUMER_KEY, READONLY_CONSUMER_SECRET, CALLBACK_URL)
+    twitter_url = handler.get_authorization_url()
+
+    session['request_token'] = handler.request_token
     session['act_uuid'] = act_uuid
-    return render_template('shop.html', act=dict(name="test"), twitter_url=twitter_url)
+
+    # static
+    url_for('static', filename="style.css")
+    return render_template('shop.html', act=act.serialize, start_date=str2date(act.activity_start_date), twitter_url=twitter_url)
+
 
 @app.route('/twitter_redirect')
 def add_member():
@@ -62,39 +88,51 @@ def add_member():
 
     やること: 客と行列を取得する。なければ作る。
     '''
-    verifier = request.GET.get('oauth_verifier')
-    token = session.get('request_token')
+    print session.items()
+    verifier = request.args.get('oauth_verifier')
+    oauth_token = request.args.get('oauth_token')
+    request_token = session.get('request_token')
+    session.pop('request_token', None)
     act_uuid = session.get('act_uuid')
-    if verifier is None or token is None or act_uuid is None:
+
+    if verifier is None or request_token is None or act_uuid is None:
         abort(400)
-    session.delete('request_token')
+
     # 並ぶ対象のActivityをゲットする
     act = Activity.query.filter(Activity.uuid == act_uuid).first()
     if act is None:
         abort(404)
 
     # 客を特定する。なければ作る。
-    auth = tweet.get_auth_from_token(token, verifier)
-    user = User.query.filter(
-        User.twitter_token==auth.access_token,
-        User.twitter_secret==auth.access_secret).first()
-    if user is None:
-        user = User(
-            twitter_token=auth.access_token,
-            twitter_secret=auth.access_token_secret,
-            twitter_name=auth.username)
-        db.session.add(user)
+    handler = tweepy.OAuthHandler(READONLY_CONSUMER_KEY, READONLY_CONSUMER_SECRET, CALLBACK_URL)
+    handler.request_token = {
+        'oauth_token': oauth_token,
+        'oauth_token_secret': request_token['oauth_token_secret']
+    }
+
+    access_token, access_token_secret = handler.get_access_token(verifier)
+
+    customer = Customer.query.filter(
+        Customer.twitter_token==access_token,
+        Customer.twitter_secret==access_token_secret).first()
+    if customer is None:
+        handler.get_username()
+        customer = Customer(
+            twitter_token=access_token,
+            twitter_secret=access_token_secret,
+            twitter_name=handler.username)
+        db.session.add(customer)
         db.session.commit()
 
     # 行列を特定する。なければ作る
-    line = Line.query.filer(Line.activity_id==act.id, Line.user_id==user.id).first()
+    line = Line.query.filter(Line.activity_id==act.id, Line.customer_id==customer.id).first()
     if line is None:
-        line = Line(uuid=str(uuid.uuid4()),activity_id=act.id,user_id=user.id)
+        line = Line(uuid=str(uuid.uuid4()),activity_id=act.id,customer_id=customer.id)
         db.session.add(line)
         db.session.commit()
 
     # 行列のuuidは他の人に絶対見せちゃだめ
-    redirect(url_for(line_view, line_no=line.uuid))
+    return redirect(url_for('.line_view', line_no=line.uuid))
 
 
 @app.route('/line/<line_no>', methods=['GET'])
@@ -106,6 +144,23 @@ def line_view(line_no):
     act_uuid = session.get('act_uuid')
     if act_uuid is None:
         abort(404)
+
+    # 並ぶ対象のActivityをゲットする
+    act = Activity.query.filter(Activity.uuid == act_uuid).first()
+    if act is None:
+        abort(404)
+
+    return render_template('line.html', act=act.serialize, start_date=str2date(act.activity_start_date))
+
+
+@app.route('/line/qr')
+def get_image():
+    line_uuid = request.args.get('line_uuid')
+    if line_uuid is None:
+        abort(404)
+
+    
+    return send_file(filename, mimetype='image/gif')
 
 
 @app.route('/api/tw/register', methods = ['POST'])
@@ -174,22 +229,13 @@ def post_my_activity():
     activity_url = request.json.get('activity_url')
     activity_template = request.json.get('activity_template')
 
-    if activity_start_date:
-        start_date = datetime.strptime(activity_start_date, "%Y-%m-%dT%H:%M:%S")
-    else:
-        start_date = None
-    if activity_end_date:
-        end_date = datetime.strptime(activity_end_date, "%Y-%m-%dT%H:%M:%S")
-    else:
-        end_date = None
-
     act = Activity(
         user_id=g.user.id,
         uuid=str(uuid.uuid4()),
         activity_name=activity_name,
         activity_location=activity_location,
-        activity_start_date=start_date,
-        activity_end_date=end_date,
+        activity_start_date=activity_start_date,
+        activity_end_date=activity_end_date,
         activity_description=activity_description,
         activity_url=activity_url,
         activity_template=activity_template
@@ -197,9 +243,12 @@ def post_my_activity():
     db.session.add(act)
     db.session.commit()
 
-    msg = "【テスト】{0}\nhttp://vourja.info/shop/?access={1}".format(
-        activity_template, act.uuid.replace('-', '_'))
+    msg = "【テスト】{0}\nhttp://{1}/shop?i={2}".format(
+        activity_template,
+        '192.168.111.109:5000',
+        act.uuid.replace('-', '_'))
 
+    print msg
     #tweet.post(msg)
 
     return jsonify(act.serialize)
