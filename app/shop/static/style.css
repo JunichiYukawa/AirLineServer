@@ -55,7 +55,6 @@ body {
 
 /* Padding for spacing */
 .inner {
-  padding: 2rem;
 }
 
 nav {
@@ -68,7 +67,6 @@ nav {
  */
 
 .masthead {
-  margin-bottom: 2rem;
 }
 
 .masthead-brand {

@@ -16,28 +16,31 @@
   </head>
 
   <body>
-
     <div class="site-wrapper">
-
       <div class="site-wrapper-inner">
-
         <div class="cover-container">
-
-          <div class="inner cover">
-            <h1 class="date-heading">{{ line_no }}</h1>
-            <h2 class="cover-heading">{{ act.activity_name }}</h2>
-            <p>あなたの番号は <span class="your-number">88</span> 番です</p>
-            <img src="/line/qr?i={{ line_uuid }}">
-          </div>
-
-          <div class="mastfoot">
+          <div class="masthead clearfix">
             <div class="inner">
+              <h3 class="masthead-brand">{{ act.activity_name }}</h3>
+              <nav class="nav nav-masthead">
+                <a class="nav-link" href="#">Map</a>
+                <a class="nav-link" href="http://twitter.com/{{act.user.twitter_name}}">Contact to @{{ act.user.twitter_name }}</a>
+              </nav>
               <p>Created By <a href="https://twitter.com/vourja">@vourja</a></p>
             </div>
           </div>
-
+          <div class="inner cover">
+            <p>あなたの番号は <span class="your-number">{{ line.number }}</span> 番です</p>
+            <img src="/line/qr?i={{ line.uuid }}">
+            <small>
+              <p>このQRコードはお店の人に言われたら見せてください。</p>
+            </small>
+            <p class="lead">
+              <a href="#" class="btn btn-link">やっぱりやめます</a>
+              <a href="#" class="btn btn-lg btn-primary">到着しました</a>
+            </p>
+          </div>
         </div>
-
       </div>
 
     </div>

@@ -7,7 +7,6 @@ import logging
 
 app = Flask(__name__)
 app.config.from_object('shop.config')
-print app.secret_key
 app.logger.setLevel(logging.DEBUG)
 Session(app)
 

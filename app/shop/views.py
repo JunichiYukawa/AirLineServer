@@ -4,6 +4,8 @@ import uuid
 import io
 from flask import jsonify, request, url_for, redirect, abort, g, render_template, make_response, session
 
+from sqlalchemy import desc
+
 from shop import app, db, auth
 from shop.models import User, Activity, Line, Customer
 
@@ -36,7 +38,7 @@ def auth_func(**kw):
     app.logger.debug("auth_func")
     pass
 
-def str2date(str):
+def ios2disp(str):
     if str:
         return datetime.strptime(str, "%Y-%m-%dT%H:%M:%S").strftime("%Y年%m月%d日 %H時%S分").decode('utf-8')
     else:
@@ -89,7 +91,7 @@ def shop_view():
     print session
     # static
     url_for('static', filename="style.css")
-    return render_template('shop.html', act=act.serialize, start_date=str2date(act.activity_start_date), twitter_url=twitter_url)
+    return render_template('shop.html', act=act.serialize, start_date=ios2disp(act.activity_start_date), twitter_url=twitter_url)
 
 
 @app.route('/twitter_redirect')
@@ -138,12 +140,27 @@ def add_member():
     # 行列を特定する。なければ作る
     line = Line.query.filter(Line.activity_id==act.id, Line.customer_id==customer.id).first()
     if line is None:
-        line = Line(uuid=str(uuid.uuid4()),activity_id=act.id,customer_id=customer.id)
+        now = datetime.now()
+        max_number_line = Line.query.filter(Line.activity_id==act.id).order_by(desc(Line.number)).first()
+        if max_number_line is None:
+            number = 1
+        else:
+            number = max_number_line.number + 1
+
+        str_now = now.strftime("%Y-%m-%dT%H:%M:%S")
+        line = Line(
+            uuid=str(uuid.uuid4()),
+            activity_id=act.id,
+            customer_id=customer.id,
+            number=number,
+            create_date=str_now,
+            arrived_date=str_now)
         db.session.add(line)
         db.session.commit()
 
     # 行列のuuidは他の人に絶対見せちゃだめ
-    return redirect(url_for('.line_view', line_no=line.uuid))
+    line_no = line.uuid.replace('-', '_')
+    return redirect(url_for('.line_view', line_no=line_no))
 
 
 @app.route('/line/<line_no>', methods=['GET'])
@@ -152,8 +169,14 @@ def line_view(line_no):
     ここにはTwitter認証ができた人しか到達してはいけない
     今はURL平文だけど、そのうちTwitter認証ログインを真面目に実装する
     '''
+    line_no = line_no.replace('_', '-')
+
     act_uuid = session.get('act_uuid')
     if act_uuid is None:
+        abort(404)
+
+    line = Line.query.filter(Line.uuid == line_no).first()
+    if line is None:
         abort(404)
 
     # 並ぶ対象のActivityをゲットする
@@ -162,9 +185,9 @@ def line_view(line_no):
         abort(404)
 
     return render_template('line.html',
-        act=act.serialize,
-        line_uuid=line_no,
-        start_date=str2date(act.activity_start_date))
+                           act=act,
+                           line=line,
+                           start_date=ios2disp(act.activity_start_date))
 
 
 @app.route('/line/qr')
@@ -176,7 +199,7 @@ def get_image():
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_L,
-        box_size=10,
+        box_size=6,
         border=4,
     )
     qr.add_data(line_uuid)
@@ -199,8 +222,16 @@ def new_user():
 
     if twitter_id is None or token is None or secret is None or name is None:
         abort(400) # missing arguments
-    if User.query.filter_by(twitter_id = twitter_id).first() is not None:
-        abort(409) # existing user
+
+    user = User.query.filter_by(twitter_id=twitter_id).first()
+    if user is not None:
+        return (jsonify({
+            "auth_token": user.generate_auth_token(),
+            'twitter_name': user.twitter_name,
+            'twitter_token': user.twitter_token,
+            'twitter_secret': user.twitter_secret,
+            'twitter_id': user.twitter_id
+        }), 200)
     user = User(twitter_id = twitter_id, twitter_token = token, twitter_secret = secret, twitter_name = name)
     db.session.add(user)
     db.session.commit()
@@ -237,10 +268,17 @@ def get_my_info():
 @app.route('/api/activities', methods=['GET'])
 @auth.login_required
 def get_my_activity():
-    '''ユーザーのアクティビティを全て取得'''
-    objects = [ act.serialize for act in Activity.query.filter(Activity.user_id==g.user.id).all()]
-    data = dict(total=len(objects), objects=objects)
-    return (jsonify(data), 200)
+    act_uuid = request.args.get('i')
+    if act_uuid is None:
+        '''ユーザーのアクティビティを全て取得'''
+        objects = [ act.serialize for act in Activity.query.filter(Activity.user_id==g.user.id).all()]
+        data = dict(total=len(objects), objects=objects)
+        return (jsonify(data), 200)
+    else:
+        act = Activity.query.filter(Activity.user_id == g.user.id, Activity.uuid == act_uuid).first()
+        if act is None:
+            abort(404)
+        return (jsonify(act.serialize), 200)
 
 
 @app.route('/api/activities', methods=['POST'])
@@ -255,6 +293,9 @@ def post_my_activity():
     activity_url = request.json.get('activity_url')
     activity_template = request.json.get('activity_template')
 
+    now = datetime.now()
+    str_now = now.strftime("%Y-%m-%dT%H:%M:%S")
+
     act = Activity(
         user_id=g.user.id,
         uuid=str(uuid.uuid4()),
@@ -264,7 +305,8 @@ def post_my_activity():
         activity_end_date=activity_end_date,
         activity_description=activity_description,
         activity_url=activity_url,
-        activity_template=activity_template
+        activity_template=activity_template,
+        created_date=str_now
     )
     db.session.add(act)
     db.session.commit()
@@ -274,7 +316,65 @@ def post_my_activity():
         '192.168.111.109:5000',
         act.uuid.replace('-', '_'))
 
-    tweet_post(g.user.twitter_token, g.user.twitter_secret, msg)
+    #tweet_post(g.user.twitter_token, g.user.twitter_secret, msg)
+    print msg
 
     return jsonify(act.serialize)
 
+
+@app.route('/api/activities/finish', methods=['POST'])
+@auth.login_required
+def finish_my_activity():
+    act_uuid = request.args.get('i')
+    act = Activity.query.filter(Activity.uuid==act_uuid).first()
+    if act is None:
+        abort(404)
+    now = datetime.now()
+    str_now = now.strftime("%Y-%m-%dT%H:%M:%S")
+    act.finished_date = str_now
+    db.session.commit()
+    return (jsonify(act.serialize), 200)
+
+
+@app.route('/api/line', methods=["GET"])
+@auth.login_required
+def get_line():
+    print "get_line"
+    line_uuid = request.args.get('uuid')
+    if line_uuid is None:
+        return get_line_extra()
+
+    act_uuid = request.args.get('act_id')
+
+
+def get_line_extra():
+    print "get_line_extra"
+    act_uuid = request.args.get('act_id')
+    act = Activity.query.filter(Activity.uuid == act_uuid).first()
+    if act is None:
+        abort(404)
+    type = request.args.get('q')
+    if type == 'current':
+        # 本当は良くないのだけど、回して探す
+        # DB設計見直さないと
+        for line in act.lines:
+            if line.arrived_date and line.pass_date is None:
+                return jsonify(line.serialize)
+        abort(404)
+    abort(400)
+
+
+@app.route('/api/line/finish', methods=["POST"])
+@auth.login_required
+def close_line():
+    line_uuid = request.args.get('i')
+    if line_uuid is None:
+        abort(404)
+
+    line = Line.query.filter(Line.uuid==line_uuid).first()
+    if line is None:
+        abort(404)
+
+    line.pass_date = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    db.session.commit()
+    return jsonify(line.serialize)

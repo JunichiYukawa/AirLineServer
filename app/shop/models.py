@@ -5,7 +5,6 @@ from sqlalchemy import ForeignKey
 from itsdangerous import (TimedJSONWebSignatureSerializer
                           as Serializer, BadSignature, SignatureExpired)
 
-
 # Datetime形式のDump
 def dump_datetime(value):
     """Deserialize datetime object into string form for JSON processing."""
@@ -83,6 +82,11 @@ class Activity(db.Model):
     activity_url = db.Column(db.Text)
     activity_template = db.Column(db.Text)
 
+    created_date = db.Column(db.Text)
+    finished_date = db.Column(db.Text)
+
+    user = relation("User")
+
     @property
     def serialize(self):
         return dict(
@@ -96,6 +100,8 @@ class Activity(db.Model):
             activity_description=self.activity_description,
             activity_url=self.activity_url,
             activity_template=self.activity_template,
+            finished_date=self.finished_date,
+            created_date=self.created_date,
             activity_lines=self.serialize_lines
         )
 
@@ -113,13 +119,22 @@ class Line(db.Model):
     activity_id = db.Column(db.Integer, ForeignKey('activities.id'))
     customer_id = db.Column(db.Integer, ForeignKey('customers.id'))
 
-    activity = relation(Activity, backref=backref('lines', order_by=id))
+    create_date = db.Column(db.Text)
+    arrived_date = db.Column(db.Text)
+    pass_date = db.Column(db.Text)
+
+    activity = relation(Activity, backref=backref('lines', primaryjoin='Line.activity_id == Activity.id', order_by=number))
     customer = relation(Customer, backref=backref('customer', order_by=id))
 
     @property
     def serialize(self):
         return dict(
-            customer_id=self.customer_id
+            customer_id=self.customer_id,
+            uuid=self.uuid,
+            number=self.number,
+            create_date=self.create_date,
+            arrived_date = self.arrived_date,
+            pass_date = self.pass_date
         )
 
 
